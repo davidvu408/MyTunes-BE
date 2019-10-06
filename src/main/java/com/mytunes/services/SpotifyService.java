@@ -2,6 +2,7 @@ package com.mytunes.services;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 import org.springframework.stereotype.Service;
 
@@ -52,17 +53,39 @@ public class SpotifyService {
 		return result;
 	}
 	
-	public Album[] getSeveralAlbums(String accessToken, String[] albumIds) {
+	public ArrayList<Album> getSeveralAlbums(String accessToken, String[] albumIds) {
+		ArrayList<Album> result = new ArrayList<Album>();
 		SpotifyConfig.getInstance().setAccessToken(accessToken);
-		GetSeveralAlbumsRequest getSeveralAlbumsRequest = SpotifyConfig.getInstance().getSeveralAlbums(albumIds)
-				.build();
-		try {
-			Album[] albums = getSeveralAlbumsRequest.execute();
-			return albums;
-		} catch (IOException | SpotifyWebApiException e) {
-			System.out.println("Error: " + e.getMessage());
-		}
-		return null;
+		int from = 0;
+		int to = 20;
+	
+		int resultLength = -1;
+		do {
+			String[] subArr;
+			if(albumIds.length - from >= 20) {
+				//System.out.println(from - to);
+				subArr = Arrays.copyOfRange(albumIds, from, to);
+			} else {
+				//System.out.println(from - to);
+				subArr = Arrays.copyOfRange(albumIds, from, albumIds.length);
+			}
+			//System.out.println(subArr.length);
+			GetSeveralAlbumsRequest getSeveralAlbumsRequest = SpotifyConfig.getInstance()
+					.getSeveralAlbums(subArr)
+					.build();
+			try {
+				Album[] albums = getSeveralAlbumsRequest.execute();
+				resultLength = albums.length;
+				for(Album album : albums) {
+					result.add(album);
+				}
+			} catch (IOException | SpotifyWebApiException e) {
+				System.out.println("Error: " + e.getMessage());
+			}
+			from += 20;
+			to += 20;
+		} while (resultLength == 20);
+		return result;
 	}
 
 	public Integer getAlbumTrackCount(String accessToken, String albumId) {

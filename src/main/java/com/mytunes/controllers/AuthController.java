@@ -131,26 +131,35 @@ public class AuthController {
 			Double count = albumFreqCountFromSavedTracks.getOrDefault(track.getAlbum().getId(), 0.0);
 			albumFreqCountFromSavedTracks.put(track.getAlbum().getId(), count + 1);
 		}
-		
+
+		// Get Albums from User saved tracks
+		String[] albumIdsFromSavedTracks = new String[albumFreqCountFromSavedTracks.keySet().size()];
+		 int i = 0;
+		 for(String albumId : albumFreqCountFromSavedTracks.keySet()) {
+			 albumIdsFromSavedTracks[i++] = albumId;
+		 }
+
+		ArrayList<Album> albumsFromSavedTracks = spotifyService.getSeveralAlbums(accessToken, albumIdsFromSavedTracks);
+
 		// Get percentage of Saved Tracks from each Album and add to rankedAlbums
+		i = 0;
 		for(Map.Entry<String, Double> entry : albumFreqCountFromSavedTracks.entrySet()) {
-			String albumId = entry.getKey();
-			Integer albumCount = spotifyService.getAlbumTrackCount(accessToken, albumId);
-			
-			Double weightFromAlbumPercentage = entry.getValue() / albumCount; // Ratio of Saved Tracks per Album
+			String albumId = entry.getKey();			
+			Double weightFromAlbumPercentage = entry.getValue() / albumsFromSavedTracks.get(i).getTracks().getTotal(); // Ratio of Saved Tracks per Album
 			Double albumWeight = rankedAlbums.getOrDefault(albumId, 0.0); // Current weight of Album ID in rankedAlbums
 			rankedAlbums.put(albumId, albumWeight + weightFromAlbumPercentage); // Add new weight
 		}
 		
 		
 		 String[] albumIds = new String[rankedAlbums.keySet().size()];
-		 int i = 0;
+		 i = 0;
 		 for(String albumId : rankedAlbums.keySet()) {
 			 albumIds[i++] = albumId;
 		 }
-		 Album[] rankedAlbumsArr = spotifyService.getSeveralAlbums(accessToken, albumIds);
+		 ArrayList<Album> rankedAlbumsArr = spotifyService.getSeveralAlbums(accessToken, albumIds);
 		 
-		return rankedAlbumsArr;
+		 
+		return null;
 	}
 	
 }

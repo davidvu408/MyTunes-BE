@@ -1,2 +1,0 @@
-# MyTunes-BE
-MyTunes-FE
