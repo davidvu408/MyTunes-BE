@@ -1,22 +1,31 @@
 package com.mytunes.models;
 
-public class RankedAlbumModel {
 
-	String id;
-	String name;
-	//ImageModel[] imageObjects;
+import com.wrapper.spotify.model_objects.specification.Image;
+
+public class RankedAlbumModel implements Comparable<RankedAlbumModel> {
+
 	Double weight;
+	String name;
+	String albumCoverImgURL;
 	
 	public RankedAlbumModel() { }
 	
-	public RankedAlbumModel(String id, String name, Double weight) {
-		this.id = id;
-		this.name = name;
-		this.weight = weight;
+
+	public Double getWeight() {
+		return weight;
 	}
 	
-	public RankedAlbumModel setId(String id) {
-		this.id = id;
+	public String getName() {
+		return name;
+	}
+
+	public String getAlbumCoverImgURL() {
+		return albumCoverImgURL;
+	}
+	
+	public RankedAlbumModel setAlbumCoverImgURL(String url) {
+		this.albumCoverImgURL = url;
 		return this;
 	}
 	
@@ -29,7 +38,13 @@ public class RankedAlbumModel {
 		this.weight = weight;
 		return this;
 	}
+
+
+
+	@Override
+	public int compareTo(RankedAlbumModel o) {
+		return Double.compare(this.weight, o.weight);
+	}
 	
-	// Sort by weight
-	// Identified by id
+	
 }

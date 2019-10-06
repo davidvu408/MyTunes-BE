@@ -4,8 +4,11 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,11 +27,13 @@ import com.wrapper.spotify.SpotifyHttpManager;
 import com.wrapper.spotify.exceptions.SpotifyWebApiException;
 import com.wrapper.spotify.model_objects.credentials.AuthorizationCodeCredentials;
 import com.wrapper.spotify.model_objects.specification.Album;
+import com.wrapper.spotify.model_objects.specification.AlbumSimplified;
 import com.wrapper.spotify.model_objects.specification.Artist;
 import com.wrapper.spotify.model_objects.specification.Paging;
 import com.wrapper.spotify.model_objects.specification.SavedAlbum;
 import com.wrapper.spotify.model_objects.specification.SavedTrack;
 import com.wrapper.spotify.model_objects.specification.Track;
+import com.wrapper.spotify.model_objects.specification.User;
 import com.wrapper.spotify.requests.authorization.authorization_code.AuthorizationCodeRequest;
 import com.wrapper.spotify.requests.authorization.authorization_code.AuthorizationCodeUriRequest;
 import com.wrapper.spotify.requests.data.library.GetCurrentUsersSavedAlbumsRequest;
@@ -39,15 +44,15 @@ import com.wrapper.spotify.requests.data.personalization.simplified.GetUsersTopT
 @RestController
 @CrossOrigin
 public class AuthController {
-	
+
 	@Autowired
 	SpotifyService spotifyService;
-	  
+
 	@RequestMapping("/")
 	public String index() {
 		return "HELLO WORLD!";
 	}
-	
+
 	@RequestMapping(value = "/spotify-api/prompt-user", method = RequestMethod.GET)
 	public String promptUser() {
 		AuthorizationCodeUriRequest authorizationCodeUriRequest = SpotifyConfig.getInstance().authorizationCodeUri()
@@ -55,11 +60,10 @@ public class AuthController {
 		final URI uri = authorizationCodeUriRequest.execute();
 		return uri.toString();
 	}
-	
+
 	@RequestMapping(value = "/spotify-api/access-token", method = RequestMethod.GET)
 	public AccessTokenModel accessToken(String authCode) {
-		AuthorizationCodeRequest authorizationCodeRequest = SpotifyConfig.getInstance()
-				.authorizationCode(authCode)
+		AuthorizationCodeRequest authorizationCodeRequest = SpotifyConfig.getInstance().authorizationCode(authCode)
 				.build();
 		AccessTokenModel accessTokenModel = new AccessTokenModel();
 		try {
@@ -69,98 +73,115 @@ public class AuthController {
 			accessTokenModel.setError(false);
 		} catch (IOException | SpotifyWebApiException e) {
 			accessTokenModel.setError(true);
-		    System.out.println("Error: " + e.getMessage());
+			System.out.println("Error: " + e.getMessage());
 		}
 		return accessTokenModel;
 	}
-	
+
 	@RequestMapping(value = "/topTracks", method = RequestMethod.GET)
 	public ArrayList<String> getUsersTopTracks(String accessToken, String timeRange) {
 		SpotifyConfig.getInstance().setAccessToken(accessToken);
 		ArrayList<String> result = new ArrayList<String>();
 
-		GetUsersTopTracksRequest getUsersTopTracksRequest = SpotifyConfig.getInstance().getUsersTopTracks()
-		          .limit(50)
-		          .offset(0)
-		          .time_range(timeRange)
-		          .build();
-		
+		GetUsersTopTracksRequest getUsersTopTracksRequest = SpotifyConfig.getInstance().getUsersTopTracks().limit(50)
+				.offset(0).time_range(timeRange).build();
+
 		try {
-	      Paging<Track> trackPaging = getUsersTopTracksRequest.execute();
-	      for(Track track : trackPaging.getItems()) {
-	    	  result.add(track.getName());
-	      }
-	    } catch (IOException | SpotifyWebApiException e) {
-	      System.out.println("Error: " + e.getMessage());
-	    }
+			Paging<Track> trackPaging = getUsersTopTracksRequest.execute();
+			for (Track track : trackPaging.getItems()) {
+				result.add(track.getName());
+			}
+		} catch (IOException | SpotifyWebApiException e) {
+			System.out.println("Error: " + e.getMessage());
+		}
 		return result;
 	}
-	
+
 	@RequestMapping(value = "/topArtists", method = RequestMethod.GET)
 	public ArrayList<String> getUsersTopArtists(String accessToken, String timeRange) {
 		return spotifyService.getUsersTopArtists(accessToken, timeRange);
 	}
 	
-	@RequestMapping(value = "/trackCount", method = RequestMethod.GET)
-	public Integer getTrackCount(String accessToken, String albumId) {
-		return spotifyService.getAlbumTrackCount(accessToken, albumId);
+	@RequestMapping(value = "/userProfile", method = RequestMethod.GET)
+	public User getUserProfile(String accessToken) {
+		return spotifyService.getUserProfile(accessToken);
 	}
-	
+
+	/**
+	 * Favorite albums are calculated by: 1) User's saved albums (each album saved
+	 * has weight of 1.0) 2) From User's saved songs, for each song that belongs to
+	 * an Album, we calculate the percentage of songs the User has saved of an Album
+	 * (0 - 1.0)
+	 */
 	@RequestMapping(value = "/topAlbums", method = RequestMethod.GET)
-	public Album[] getUserTopAlbums(String accessToken) {
-		
-		//ArrayList<RankedAlbumModel> rankedAlbums = new ArrayList<RankedAlbumModel>();
-		
+	public List<RankedAlbumModel> getUserTopAlbums(String accessToken, @RequestParam(required = false) Integer limit) {
+		if (limit == null) {
+			limit = 20;
+		}
 		HashMap<String, Double> rankedAlbums = new HashMap<String, Double>();
-		
-		// A saved album has weight of 1.0
-		ArrayList<Album> savedAlbums = spotifyService.getUserSavedAlbums(accessToken);
-		for(Album album : savedAlbums) {
+		calculatePercentageOfAlbumSavedFromLikedSongs(rankedAlbums, accessToken);
+
+		for (Album album : spotifyService.getUserSavedAlbums(accessToken)) {
 			Double count = rankedAlbums.getOrDefault(album.getId(), 0.0);
-			rankedAlbums.put(album.getId(), count + 1);
-		}
-		
-		// Calculate percentage of saved songs per album (0.0 - 1.0) 
-		
-		// Key: Album ID, Value: Frequency Count
-		HashMap<String, Double> albumFreqCountFromSavedTracks = new HashMap<String, Double>(); 
-		ArrayList<Track> savedTracks = spotifyService.getUserSavedTracks(accessToken);
-		
-		// Get Album Frequency Count from Saved Tracks
-		for(Track track : savedTracks) {
-			Double count = albumFreqCountFromSavedTracks.getOrDefault(track.getAlbum().getId(), 0.0);
-			albumFreqCountFromSavedTracks.put(track.getAlbum().getId(), count + 1);
+			rankedAlbums.put(album.getId(), count + 1.0);
 		}
 
-		// Get Albums from User saved tracks
-		String[] albumIdsFromSavedTracks = new String[albumFreqCountFromSavedTracks.keySet().size()];
-		 int i = 0;
-		 for(String albumId : albumFreqCountFromSavedTracks.keySet()) {
-			 albumIdsFromSavedTracks[i++] = albumId;
-		 }
-
-		ArrayList<Album> albumsFromSavedTracks = spotifyService.getSeveralAlbums(accessToken, albumIdsFromSavedTracks);
-
-		// Get percentage of Saved Tracks from each Album and add to rankedAlbums
-		i = 0;
-		for(Map.Entry<String, Double> entry : albumFreqCountFromSavedTracks.entrySet()) {
-			String albumId = entry.getKey();			
-			Double weightFromAlbumPercentage = entry.getValue() / albumsFromSavedTracks.get(i).getTracks().getTotal(); // Ratio of Saved Tracks per Album
-			Double albumWeight = rankedAlbums.getOrDefault(albumId, 0.0); // Current weight of Album ID in rankedAlbums
-			rankedAlbums.put(albumId, albumWeight + weightFromAlbumPercentage); // Add new weight
+		String[] resultAlbumIds = new String[rankedAlbums.keySet().size()];
+		int i = 0;
+		for (String id : rankedAlbums.keySet()) {
+			resultAlbumIds[i++] = id;
 		}
-		
-		
-		 String[] albumIds = new String[rankedAlbums.keySet().size()];
-		 i = 0;
-		 for(String albumId : rankedAlbums.keySet()) {
-			 albumIds[i++] = albumId;
-		 }
-		 ArrayList<Album> rankedAlbumsArr = spotifyService.getSeveralAlbums(accessToken, albumIds);
-		 
-		 
-		return null;
+
+		ArrayList<RankedAlbumModel> result = new ArrayList<RankedAlbumModel>();
+
+		for (Album album : spotifyService.getSeveralAlbums(accessToken, resultAlbumIds)) {
+			RankedAlbumModel rankedAlbumModel = new RankedAlbumModel();
+			rankedAlbumModel.setWeight(rankedAlbums.get(album.getId()));
+			rankedAlbumModel.setName(album.getName());
+
+			// Use 2nd image URL but default onto 1st one
+			if (album.getImages().length >= 1) {
+				rankedAlbumModel.setAlbumCoverImgURL(album.getImages()[1].getUrl());
+			} else {
+				rankedAlbumModel.setAlbumCoverImgURL(album.getImages()[0].getUrl());
+			}
+
+			// Don't include Albums of type Singles
+			if (album.getTracks().getTotal() != 1) {
+				result.add(rankedAlbumModel);
+			}
+		}
+		result.sort(Collections.reverseOrder());
+		int endPoint = (limit > result.size()) ? result.size() : limit;
+		return result.subList(0, endPoint);
 	}
-	
-}
 
+	// 1) From Users Saved Tracks, get super set of Album IDs and count of Tracks
+	// User has saved from each album
+	// 2) From each Album ID, put number of songs user has saved to total album
+	// track count
+	private void calculatePercentageOfAlbumSavedFromLikedSongs(HashMap<String, Double> rankedAlbums,
+			String accessToken) {
+		// For each track, add Album ID and increment count
+		for (Track track : spotifyService.getUserSavedTracks(accessToken)) {
+			Double count = rankedAlbums.getOrDefault(track.getAlbum().getId(), 0.0);
+			rankedAlbums.put(track.getAlbum().getId(), count + 1.0);
+		}
+
+		// Get all album IDs in map
+		String[] albumIds = new String[rankedAlbums.keySet().size()];
+		int i = 0;
+		for (String id : rankedAlbums.keySet()) {
+			albumIds[i++] = id;
+		}
+
+		// Get ArrayList of Album objects
+		ArrayList<Album> temp = spotifyService.getSeveralAlbums(accessToken, albumIds); // Albums are returned in order  they are requested
+		i = 0;
+		for (Entry<String, Double> entry : rankedAlbums.entrySet()) {
+			rankedAlbums.put(entry.getKey(), entry.getValue() / temp.get(i++).getTracks().getTotal());
+		}
+	}
+
+
+}
