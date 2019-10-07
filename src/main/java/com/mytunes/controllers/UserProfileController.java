@@ -129,6 +129,40 @@ public class UserProfileController {
 		return songPopularityGraph;
 	}
 	
+	@RequestMapping(value = "/songTimeRange", method=RequestMethod.GET)
+	public HashMap<String, Integer> getSongTimeRange(String accessToken) {
+		
+		HashMap<String, Integer> albumFrequencyCount = new HashMap<String, Integer>();
+		// Get Users Saved Tracks
+		ArrayList<Track> userSavedTracks = spotifyService.getUserSavedTracks(accessToken);
+		
+		// For each track, get the frequency count of the Album the track appears on
+		for(Track track : userSavedTracks) {
+			Integer albumCount = albumFrequencyCount.getOrDefault(track.getAlbum().getId(), 0);
+			albumFrequencyCount.put(track.getAlbum().getId(), albumCount + 1);
+		}
+		
+		// Prepare to use getSeveralAlbums()
+		String[] albumIds = new String[albumFrequencyCount.entrySet().size()];
+		int i = 0;
+		for(Map.Entry<String, Integer> entry : albumFrequencyCount.entrySet()) {
+			albumIds[i++] = entry.getKey();
+		}
+		ArrayList<Album> albums = spotifyService.getSeveralAlbums(accessToken, albumIds);
+		
+		// For each of the unique Albums in User Saved Track, get the total frequency count
+		// of tracks saved by the user according to release date by album
+		HashMap<String, Integer> trackFrequencyCount = new HashMap<String, Integer>();
+		for(Album album : albums) {
+			String releaseYear = album.getReleaseDate().substring(0, 4);
+			Integer albumCountFromSavedSongs = albumFrequencyCount.get(album.getId());
+			Integer currentTrackCount = trackFrequencyCount.getOrDefault(releaseYear, 0);
+			trackFrequencyCount.put(releaseYear, currentTrackCount + albumCountFromSavedSongs);
+		}
+		
+		return trackFrequencyCount;
+	}
+	
 	@RequestMapping(value = "/userProfile", method = RequestMethod.GET)
 	public User getUserProfile(String accessToken) {
 		return spotifyService.getUserProfile(accessToken);
