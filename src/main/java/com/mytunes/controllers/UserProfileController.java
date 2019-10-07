@@ -55,8 +55,10 @@ public class UserProfileController {
 	}
 	
 	@RequestMapping(value = "/topGenres", method = RequestMethod.GET)
-	public ArrayList<RankedGenreModel> getUserTopGenres(String accessToken) {
-		
+	public List<RankedGenreModel> getUserTopGenres(String accessToken, @RequestParam(required = false) Integer limit) {
+		if (limit == null) {
+			limit = 20;
+		}
 		// Get all the Users Saved Tracks
 		ArrayList<Track> userSavedTracks = spotifyService.getUserSavedTracks(accessToken);
 		// Get frequency count of associated Artists from Users Saved Tracks
@@ -98,7 +100,8 @@ public class UserProfileController {
 		}
 
 		rankedGenres.sort(Collections.reverseOrder());
-		return rankedGenres;
+		int endPoint = (limit > rankedGenres.size()) ? rankedGenres.size() : limit;
+		return rankedGenres.subList(0, endPoint);
 	}
 
 	@RequestMapping(value = "/topArtists", method = RequestMethod.GET)
