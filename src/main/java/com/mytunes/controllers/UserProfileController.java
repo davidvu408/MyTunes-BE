@@ -109,6 +109,26 @@ public class UserProfileController {
 		return spotifyService.getUsersTopArtists(accessToken, timeRange);
 	}
 	
+	@RequestMapping(value = "/songPopularity", method=RequestMethod.GET)
+	public HashMap<Integer, Integer> getSongPopularity(String accessToken) {
+		ArrayList<Track> userSavedTracks = spotifyService.getUserSavedTracks(accessToken);
+		
+		// Initialize x-axis to be 0 - 100
+		HashMap<Integer, Integer> songPopularityGraph = new HashMap<Integer, Integer>();
+		for(int i = 0; i <= 100; i++) {
+			songPopularityGraph.put(i, 0);
+		}
+		
+		// For each track, increment the count by 1 at the given popularity of the given track
+		for(Track track : userSavedTracks) {
+			Integer trackPopularity = track.getPopularity();
+			Integer numTracksInPopularity = songPopularityGraph.get(trackPopularity);
+			songPopularityGraph.put(trackPopularity, numTracksInPopularity + 1);
+		}
+		
+		return songPopularityGraph;
+	}
+	
 	@RequestMapping(value = "/userProfile", method = RequestMethod.GET)
 	public User getUserProfile(String accessToken) {
 		return spotifyService.getUserProfile(accessToken);
